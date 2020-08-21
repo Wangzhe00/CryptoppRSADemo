@@ -46,7 +46,7 @@ main.exe -pri pri -dec cipher.txt -out recover.txt -p
 main.exe -pri pri -sign ok -out signed.txt
 
 # Verify Sign:    
-main.exe -pub pub -vsign vsign.txt 
+main.exe -pub pub -vsign signed.txt 
   ```
 
 
@@ -104,7 +104,11 @@ main.exe -pub pub -vsign vsign.txt
 
    **[*]Expansion**: The padding length of PKCS#1 is 11 Bytes.
 
+#### (3) The difference between PKCS#1 and PKCS#8
 
+- **PKCS#1** key format, mostly used for encryption and decryption of other programs such as JS, belongs to an older format standard.
+- **PKCS#8** key format, which is mostly used in the encryption and decryption of JAVA and PHP programs. It is the most commonly used key and certificate format;
+- The **PKCS#8** format adds a verification data segment to ensure the correctness of the key.
 
 
 

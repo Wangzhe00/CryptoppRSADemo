@@ -5,38 +5,12 @@ using namespace CryptoPP;
 
 #define MAXLINE 100
 #define COMPARE(a, b, x) x += (a - b)
-#define DEBUG 1
 
 extern PADDING padding;
 
 MYRSA::MYRSA() {
-
-}
-
-MYRSA::MYRSA(size_t* Size) {
-	if (*Size > 86) {
-		keySize = 2048;
-		CipherSize = 256;
-		if (*Size > 214)
-			*Size = 214;
-	}
-	else {
-		keySize = 1024;
-		CipherSize = 128;
-	}
-	// Generate Parameters
-	AutoSeededRandomPool rng;
-	InvertibleRSAFunction params;
-	params.GenerateRandomWithKeySize(rng, keySize);
-
-	// Create Keys
-	RSA::PrivateKey privateKey(params);
-	RSA::PublicKey publicKey(params);
-
-	privKey = privateKey;
-	pubKey = publicKey;
-
-	showParam(params);
+	keySize = 0;
+	CipherSize = 0;
 }
 
 MYRSA::MYRSA(char* pubKeyFile, char* priKeyFile) {
@@ -87,16 +61,16 @@ MYRSA::MYRSA(char* pubKeyFile, char* priKeyFile) {
 	pubParams.Initialize(pubKey.GetModulus(), pubKey.GetPublicExponent());
 	priParams.Initialize(privKey.GetModulus(), privKey.GetPublicExponent(), privKey.GetPrivateExponent());
 	
-	Integer wz = pubKey.GetModulus();
-	cout << wz.BitCount() << endl;
 	keySize = pubKey.GetModulus().BitCount();
 	CipherSize = keySize > 2000 ? 256 : 128;
 
+#if DEBUG_PRINT
 	cout << "pub N: " << pubKey.GetModulus() << endl;
 	cout << "pub E: " << pubKey.GetPublicExponent() << endl << endl;
 	cout << "pri N: " << privKey.GetModulus() << endl;
 	cout << "pri E: " << privKey.GetPublicExponent() << endl;
 	cout << "pri D: " << privKey.GetPrivateExponent() << endl;
+#endif // DEUBG_PRINT
 
 	// Create Keys
 	RSA::PublicKey publicKey(pubParams);
@@ -124,35 +98,31 @@ void MYRSA::SetPublibKey(char* pubKeyFile) {
 	while (getline(RSAPublicFile, tmp[cur++]));
 	// keey only the key part, remove the header and footer. 
 	int EOE = tmp[cur - 1] == "";
-	for (int i = 1; i < cur - 1 - EOE; ++i) {
+ 	for (int i = 1; i < cur - 1 - EOE; ++i) {
 		RSAPublicKey += tmp[i] + "\n";
 	}
-
 	RSAPublicFile.close();
 
 	ByteQueue pubQueue;
 	Base64Decoder pubDecoder;
+	RSAFunction pubParams;
+
 	pubDecoder.Attach(new Redirector(pubQueue));
 	pubDecoder.Put((const byte*)RSAPublicKey.data(), RSAPublicKey.length());
 	pubDecoder.MessageEnd();
-
-
 	pubKey.BERDecode(pubQueue);
-
-	RSAFunction pubParams;
 	pubParams.Initialize(pubKey.GetModulus(), pubKey.GetPublicExponent());
 
-	Integer wz = pubKey.GetModulus();
-	cout << wz.BitCount() << endl;
 	keySize = pubKey.GetModulus().BitCount();
 	CipherSize = keySize > 2000 ? 256 : 128;
 
+#if DEBUG_PRINT
 	cout << "pub N: " << pubKey.GetModulus() << endl;
 	cout << "pub E: " << pubKey.GetPublicExponent() << endl << endl;
+#endif // DEBUG_PRINT
 
 	// Create Keys
 	RSA::PublicKey publicKey(pubParams);
-
 	pubKey = publicKey;
 }
 
@@ -190,34 +160,18 @@ void MYRSA::SetPrivateKey(char* priKeyFile) {
 	InvertibleRSAFunction priParams;
 	priParams.Initialize(privKey.GetModulus(), privKey.GetPublicExponent(), privKey.GetPrivateExponent());
 
-	Integer wz = privKey.GetModulus();
-	cout << wz.BitCount() << endl;
 	keySize = privKey.GetModulus().BitCount();
 	CipherSize = keySize > 2000 ? 256 : 128;
 
+#if DEBUG_PRINT
 	cout << "pri N: " << privKey.GetModulus() << endl;
 	cout << "pri E: " << privKey.GetPublicExponent() << endl;
 	cout << "pri D: " << privKey.GetPrivateExponent() << endl;
+#endif // DEBUG_PRINT
 
 	// Create Keys
 	RSA::PrivateKey privateKey(priParams);
-
 	privKey = privateKey;
-}
-
-string Uint8_t2HexString(uint8_t in) {
-	string res = "";
-	uint16_t _in = (uint16_t)in;
-	res += (_in / 16 > 9) ? ('A' + _in / 16 - 10) : ('0' + _in / 16);
-	res += (_in % 16 > 9) ? ('A' + _in % 16 - 10) : ('0' + _in % 16);
-	return res;
-}
-
-uint8_t HexString2Uint8_t(char c1, char c2) {
-	uint16_t res = 0;
-	res += isalpha(c1) ? 16 * (10 + c1 - 'A') : 16 * (c1 - '0');
-	res += isalpha(c2) ? (10 + c2 - 'A') : (c2 - '0');
-	return (uint8_t)res;
 }
 
 void MYRSA::Encryption(char* plainPath, char* cipherPath) {
@@ -226,15 +180,12 @@ void MYRSA::Encryption(char* plainPath, char* cipherPath) {
 	plainFile.open(plainPath, ios::in);
 	cipherFile.open(cipherPath, ios::out);
 
-	string tmp[MAXLINE];
-	string data;
-	int cur = 0, len = 0;
-	while (getline(plainFile, tmp[cur])) {
-		len += tmp[cur].size();
-		data += tmp[cur++];
+	string tmp, data;
+	int len = 0;
+	while (getline(plainFile, tmp)) {
+		len += (int)tmp.size();
+		data += tmp;
 	}
-
-	AutoSeededRandomPool rng;
 
 	switch (padding) {
 		case _PKCS1v15: {
@@ -256,6 +207,7 @@ void MYRSA::Encryption(char* plainPath, char* cipherPath) {
 				for (int i = 0; i < CipherSize; ++i) {
 					cipherFile << Uint8_t2HexString(cipher[i]);
 				}
+				std::free(plain);
 #if DEBUG_PRINT
 				std::cout << "    ===============================================\n";
 				std::cout << "[*] DEBUG : _PKCS1v15()" << endl;
@@ -269,6 +221,7 @@ void MYRSA::Encryption(char* plainPath, char* cipherPath) {
 #endif // DEBUG_PRINT
 
 			}
+			std::free(cipher);
 			break;
 		}
 		case _OAEP: {
@@ -291,7 +244,9 @@ void MYRSA::Encryption(char* plainPath, char* cipherPath) {
 				for (int i = 0; i < CipherSize; ++i) {
 					cipherFile << Uint8_t2HexString(cipher[i]);
 				}
+				std::free(plain);
 			}
+			std::free(cipher);
 			break;
 		}
 		default: {
@@ -309,16 +264,16 @@ void MYRSA::Decryption(char* cipherPath, char* recoverPath) {
 	recoverFile.open(recoverPath, ios::out);
 
 	string tmp, tmp1;
-	
 
 	while (getline(cipherFile, tmp)) {
 		tmp1 += tmp;
 	}
+	// cipher
 	uint8_t* data = (uint8_t*)malloc(tmp1.size() / 2);
 	for (int i = 0; i < tmp1.size(); i += 2) {
-		data[i >> 1] = (uint8_t)HexString2Uint8_t(tmp1[i], tmp1[i + 1]);
+		data[i >> 1] = HexString2Uint8_t(tmp1[i], tmp1[i + 1]);
 	}
-	int len = tmp1.size() >> 1;
+	int len = (int)(tmp1.size()) >> 1;
 
 
 #if DEBUG_PRINT
@@ -330,10 +285,9 @@ void MYRSA::Decryption(char* cipherPath, char* recoverPath) {
 	hexdump(data, len);
 #endif // DEBUG_PRINT
 
-	AutoSeededRandomPool rng;
-
 	switch (padding) {
 		case _PKCS1v15: {
+			// The length must be a multiple of CipherSize, because RSA is encrypted in blocks
 			_ASSERT(len % CipherSize == 0);
 
 			RSAES_PKCS1v15_Decryptor d(privKey);
@@ -343,22 +297,28 @@ void MYRSA::Decryption(char* cipherPath, char* recoverPath) {
 
 			uint8_t* cipher = (uint8_t*)malloc(CipherSize);
 			uint8_t* recover = (uint8_t*)malloc(receiveLen);
+
 			for (int st = 0; st < roundNum; ++st) {
+				memset(recover, 0, receiveLen);
+				// Update the cipher every round.
 				for (int i = 0; i < CipherSize; ++i) {
 					cipher[i] = data[st * CipherSize + i];
 				}
 				ArraySource ss2(cipher, CipherSize, true,
 					new PK_DecryptorFilter(rng, d,
 						new ArraySink(recover, receiveLen)));
+				// Write the obtained plaintext into the recoverPath, the last block size may be smaller than {receiveLen}, be careful not to print extra characters.
 				for (int i = 0; i < receiveLen; ++i) {
-					if (!isascii(recover[i])) break;
+					if (recover[i] == 0) break;
 					recoverFile << recover[i];
 				}
 			}
+			std::free(cipher);
+			std::free(recover);
 			break;
 		}
 		case _OAEP: {
-
+			// The length must be a multiple of CipherSize, because RSA is encrypted in blocks
 			_ASSERT(len % CipherSize == 0);
 
 			RSAES_OAEP_SHA_Decryptor d(privKey);
@@ -370,42 +330,125 @@ void MYRSA::Decryption(char* cipherPath, char* recoverPath) {
 			uint8_t* recover = (uint8_t*)malloc(receiveLen);
 
 			for (int st = 0; st < roundNum; ++st) {
-				uint8_t* cipher = (uint8_t*)malloc(CipherSize);
+				memset(recover, 0, receiveLen);
+				// Update the cipher every round.
 				for (int i = 0; i < CipherSize; ++i) {
 					cipher[i] = data[st * CipherSize + i];
 				}
 				ArraySource ss2(cipher, CipherSize, true,
 					new PK_DecryptorFilter(rng, d,
 						new ArraySink(recover, receiveLen)));
+				// Write the obtained plaintext into the recoverPath, the last block size may be smaller than {receiveLen}, be careful not to print extra characters.
 				for (int i = 0; i < receiveLen; ++i) {
-					if (!isascii(recover[i])) break;
+					if (recover[i] == 0) break;
 					recoverFile << recover[i];
 				}
 			}
+			std::free(cipher);
+			std::free(recover);
 			break;
 		}
-		default: {
+		default: { // Useless
 			break;
 		}
 	}
 	cipherFile.close();
 	recoverFile.close();
+	std::free(data);
+
 }
 
 void MYRSA::Sign(char* signMsg, char* signOutPath) {
+	ofstream signOutFile(signOutPath, ios::out);
+	
+	int msgLen = (int)strlen(signMsg);
+	_ASSERT(msgLen < 100);
+	uint8_t* message = (uint8_t*)malloc(msgLen);
+	memcpy(message, signMsg, msgLen);
+	
+	uint8_t* signature = (uint8_t*)malloc(CipherSize);
+	uint8_t* msgSign = (uint8_t*)malloc(msgLen + CipherSize);
 
+	//MD5 md5();
+	//RSASSA_PKCS1v15_MD5_Signer signer(privKey, md5);
+	RSASSA_PKCS1v15_SHA_Signer signer(privKey);
+	ArraySource ss1(message, msgLen, true,
+		new SignerFilter(rng, signer,
+			new ArraySink(signature, CipherSize))
+	);
 
+	memcpy(msgSign + 0, message, msgLen);
+	memcpy(msgSign + msgLen, signature, CipherSize);
+
+	for (int i = 0; i < msgLen + CipherSize; i++) {
+		signOutFile << Uint8_t2HexString(msgSign[i]);
+	}
+
+#if DEBUG_PRINT
+	std::cout << "    ===============================================\n";
+	std::cout << "[*] DEBUG : RSASignPKCS()" << endl;
+	std::cout << "    Size     : " << msgLen << endl;
+	std::cout << "    keySize  : " << keySize << endl;
+	std::cout << "    CipherSize : " << CipherSize << endl;
+	std::cout << "[*] Message  : " << endl;
+	hexdump(message, msgLen);
+	std::cout << "[*] Sign     : " << endl;
+	hexdump(signature, CipherSize);
+	std::cout << "[*] Msg+Sign : " << endl;
+	hexdump(msgSign, msgLen + CipherSize);
+#endif // DEBUG_PRINT
+
+	std::free(message);
+	std::free(signature);
+	std::free(msgSign);
 }
 
 bool MYRSA::VerifySign(char* vsignPath) {
+	ifstream vsignFile(vsignPath, ios::in);
+	string tmp, tmp1;
 
-	return false;
+	while (getline(vsignFile, tmp)) {
+		tmp1 += tmp;
+	}
+
+	// cipher
+	uint8_t* msgSign = (uint8_t*)malloc(tmp1.size() / 2);
+	for (int i = 0; i < tmp1.size(); i += 2) {
+		msgSign[i >> 1] = HexString2Uint8_t(tmp1[i], tmp1[i + 1]);
+	}
+	int len = (int)(tmp1.size()) >> 1;
+
+	// Verify and Recover
+	RSASSA_PKCS1v15_SHA_Verifier verifier(pubKey);
+
+	//RSASSA_PKCS1v15_MD5_Verifier verifier(pubKey, md5);
+	try {
+		ArraySource ss2(msgSign, len, true,
+			new SignatureVerificationFilter(verifier, NULL,
+				SignatureVerificationFilter::THROW_EXCEPTION));
+		std::free(msgSign);
+		return true;
+	}
+	catch (const exception ex) {
+		//cerr << ex.what() << endl;
+		std::free(msgSign);
+		return false;
+	}
+	
+#if DEBUG_PRINT
+	std::cout << "    ===============================================\n";
+	std::cout << "[*] DEBUG : RSASignPKCS()" << endl;
+	std::cout << "    Len     : " << len << endl;
+	std::cout << "    keySize  : " << keySize << endl;
+	std::cout << "    CipherSize : " << CipherSize << endl;
+	std::cout << "[*] Msg+Sign : " << endl;
+	hexdump(msgSign, len);
+#endif // DEBUG_PRINT
+
 }
 
 // Encryption Scheme (OAEP using SHA)
-void MYRSA::RSAEncOAEP(uint8_t* Data, size_t Size) {
-
-	AutoSeededRandomPool rng;
+void MYRSA::RSAEnc(uint8_t* Data, size_t Size) {
 	// Obtain Keys
 	uint8_t* plain = (uint8_t*)malloc(Size);
 	uint8_t* cipher = (uint8_t*)malloc(CipherSize);
@@ -464,7 +507,7 @@ void MYRSA::RSAEncOAEP(uint8_t* Data, size_t Size) {
 
 #if DEBUG_PRINT
 	std::cout << "    ===============================================\n";
-	std::cout << "[*] DEBUG : RSAEncOAEP()" << endl;
+	std::cout << "[*] DEBUG :" << endl;
 	//showParam(tmp);
 	std::cout << "    keySize  : " << keySize << endl;
 	std::cout << "    CipherSize : " << CipherSize << endl;
@@ -477,15 +520,13 @@ void MYRSA::RSAEncOAEP(uint8_t* Data, size_t Size) {
 	hexdump(recover, Size);
 #endif // DEBUG_PRINT
 
-	free(plain);
-	free(cipher);
-	free(recover);
+	std::free(plain);
+	std::free(cipher);
+	std::free(recover);
 }
 
 // Signature Scheme (PKCS v1.5)
-void MYRSA::RSASignPKCS(uint8_t* Data, size_t Size) {
-
-	AutoSeededRandomPool rng;
+void MYRSA::RSASignPKCS(char* Data, size_t Size) {
 
 	// Message
 	uint8_t* message = (uint8_t*)malloc(Size);
@@ -510,9 +551,9 @@ void MYRSA::RSASignPKCS(uint8_t* Data, size_t Size) {
 			SignatureVerificationFilter::THROW_EXCEPTION)
 	);
 
-#if DEBUG
+#if DEBUG_PRINT
 	std::cout << "    ===============================================\n";
-	std::cout << "[*] DEBUG : RSASignPKCS()" << endl;
+	std::cout << "[*] DEBUG : " << endl;
 	std::cout << "    Size     : " << Size << endl;
 	std::cout << "    keySize  : " << keySize << endl;
 	std::cout << "    CipherSize : " << CipherSize << endl;
@@ -522,21 +563,27 @@ void MYRSA::RSASignPKCS(uint8_t* Data, size_t Size) {
 	hexdump(signature, CipherSize);
 	std::cout << "[*] Msg+Sign : " << endl;
 	hexdump(msg_sig, Size + CipherSize);
-#endif
+#endif // DEBUG_PRINT
 
-	free(message);
-	free(signature);
-	free(msg_sig);
+	std::free(message);
+	std::free(signature);
+	std::free(msg_sig);
 }
 
-void MYRSA::Run(uint8_t* Data, size_t Size) {
-	MYRSA RSAKey(&Size);
-
-	RSAKey.RSAEncOAEP(Data, Size);
-	RSAKey.RSASignPKCS(Data, Size);
-
+string Uint8_t2HexString(uint8_t in) {
+	string res = "";
+	uint16_t _in = (uint16_t)in;
+	res += (_in / 16 > 9) ? ('A' + _in / 16 - 10) : ('0' + _in / 16);
+	res += (_in % 16 > 9) ? ('A' + _in % 16 - 10) : ('0' + _in % 16);
+	return res;
 }
 
+uint8_t HexString2Uint8_t(char c1, char c2) {
+	uint16_t res = 0;
+	res += isalpha(c1) ? 16 * (10 + c1 - 'A') : 16 * (c1 - '0');
+	res += isalpha(c2) ? (10 + c2 - 'A') : (c2 - '0');
+	return (uint8_t)res;
+}
 
 void compare(uint8_t* a, uint8_t* b, size_t Size) {
 	int x = 0;
