@@ -54,7 +54,19 @@ MYRSA::MYRSA(char* pubKeyFile, char* priKeyFile) {
 	priDecoder.MessageEnd();
 
 	pubKey.BERDecode(pubQueue);
-	privKey.BERDecode(priQueue);
+
+	// Use different functions depending on the  private key type
+	bool PKCS8 = false;
+	try {
+		//puts("your private key is PKCS#1");
+		privKey.BERDecodePrivateKey(priQueue, false, priQueue.MaxRetrievable());
+		PKCS8 = true;
+	}
+	catch (Exception e) {}
+	if (PKCS8) {
+		privKey.BERDecode(priQueue);
+	}
+
 
 	RSAFunction pubParams;
 	InvertibleRSAFunction priParams;
@@ -97,10 +109,13 @@ void MYRSA::SetPublibKey(char* pubKeyFile) {
 	int cur = 0;
 	while (getline(RSAPublicFile, tmp[cur++]));
 	// keey only the key part, remove the header and footer. 
-	int EOE = tmp[cur - 1] == "";
- 	for (int i = 1; i < cur - 1 - EOE; ++i) {
+
+	for (int i = 1; i < cur - 1; ++i) {
+		if (tmp[i].size() == 0) break;
+		if (tmp[i].back() == '-') break;
 		RSAPublicKey += tmp[i] + "\n";
 	}
+
 	RSAPublicFile.close();
 
 	ByteQueue pubQueue;
@@ -141,8 +156,9 @@ void MYRSA::SetPrivateKey(char* priKeyFile) {
 	while (getline(RSAPrivateFile, tmp1[cur++]));
 
 	// keey only the key part, remove the header and footer. 
-	int EOE = tmp1[cur - 1] == "\n";
-	for (int i = 1; i < cur - 1 - EOE; ++i) {
+	for (int i = 1; i < cur - 1; ++i) {
+		if (tmp1[i].size() == 0) break;
+		if (tmp1[i].back() == '-') break;
 		RSAPrivateKey += tmp1[i] + "\n";
 	}
 	//cout << RSAPrivateKey << endl;
@@ -155,7 +171,17 @@ void MYRSA::SetPrivateKey(char* priKeyFile) {
 	priDecoder.Put((const byte*)RSAPrivateKey.data(), RSAPrivateKey.length());
 	priDecoder.MessageEnd();
 
-	privKey.BERDecode(priQueue);
+	// Use different functions depending on the  private key type
+	bool PKCS8 = false;
+	try {
+		//puts("your private key is PKCS#1");
+		privKey.BERDecodePrivateKey(priQueue, false, priQueue.MaxRetrievable());
+		PKCS8 = true;
+	}
+	catch (Exception e) {}
+	if (PKCS8) {
+		privKey.BERDecode(priQueue);
+	}
 
 	InvertibleRSAFunction priParams;
 	priParams.Initialize(privKey.GetModulus(), privKey.GetPublicExponent(), privKey.GetPrivateExponent());
