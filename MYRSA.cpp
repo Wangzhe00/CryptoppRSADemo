@@ -1,4 +1,5 @@
 #include "MYRSA.h"
+#include <bitset>
 
 using namespace std;
 using namespace CryptoPP;
@@ -179,7 +180,7 @@ void MYRSA::SetPrivateKey(char* priKeyFile) {
 		PKCS8 = true;
 	}
 	catch (Exception e) {}
-	if (PKCS8) {
+	if (!PKCS8) {
 		privKey.BERDecode(priQueue);
 	}
 
@@ -407,6 +408,7 @@ void MYRSA::Sign(char* signMsg, char* signOutPath) {
 	memcpy(msgSign + msgLen, signature, CipherSize);
 
 	for (int i = 0; i < msgLen + CipherSize; i++) {
+		uint8_t tmp = msgSign[i];
 		signOutFile << Uint8_t2HexString(msgSign[i]);
 	}
 
@@ -416,12 +418,12 @@ void MYRSA::Sign(char* signMsg, char* signOutPath) {
 	std::cout << "    Size     : " << msgLen << endl;
 	std::cout << "    keySize  : " << keySize << endl;
 	std::cout << "    CipherSize : " << CipherSize << endl;
-	std::cout << "[*] Message  : " << endl;
-	hexdump(message, msgLen);
+	//std::cout << "[*] Message  : " << endl;
+	//hexdump(message, msgLen);
 	std::cout << "[*] Sign     : " << endl;
 	hexdump(signature, CipherSize);
-	std::cout << "[*] Msg+Sign : " << endl;
-	hexdump(msgSign, msgLen + CipherSize);
+	//std::cout << "[*] Msg+Sign : " << endl;
+	//hexdump(msgSign, msgLen + CipherSize);
 #endif // DEBUG_PRINT
 
 	std::free(message);
@@ -596,6 +598,93 @@ void MYRSA::RSASignPKCS(char* Data, size_t Size) {
 	std::free(msg_sig);
 }
 
+
+
+void MYRSA::Base642Uint8_t(string base64, uint8_t* data) {
+	string bin;
+	for (auto it : base64) {
+		bin += Base64_2_6bit(it);
+	}
+	for (int i = 0; i < bin.size(); i += 8) {
+		string tmp = bin.substr(i, 8);
+		bitset<8> bi(tmp);
+		uint8_t ret = (uint8_t)bi.to_ulong();
+		if (ret > 0) {
+			data[i / 8] = ret;
+		}
+		else {
+			hexdump(data, i / 8);
+			break;
+		}
+	}
+}
+string MYRSA::Uint8_t2Base64(uint8_t* data) {
+	int len = 0;
+	while (data[len++] != '\0');
+	len--;
+	string ret;
+	int tag = 0; //记录最后等号的数量
+	bitset<8> bi8;
+	for (int i = 0; i < len; i += 3) {
+		string bin;
+		for (int j = i; j < i + 3; ++j) {
+			if (j < len) {
+				bi8 = data[j];
+				bin += bi8.to_string();
+			}
+			else {
+				tag = i + 3 - len; // 最多两个
+				bin += "00000000";
+			}
+		}
+		for (int j = 0; j < bin.size(); j += 6) {
+			if (j >= bin.size() - tag * 6) { // 只可能出现在末尾
+				ret += "=";
+			}
+			else {
+				bitset<6> bi6(bin.substr(j, 6));
+				ret += Bit6_2_Base64(bi6);
+			}
+		}
+	}
+	return ret;
+}
+string Base64_2_6bit(char c) {
+	if (c == '=') {
+		return "000000";
+	}
+	int val;
+	if (isupper(c)) {
+		val = c - 'A';
+	}
+	else if (islower(c)) {
+		val = c - 'a' + 26;
+	}
+	else if (isalnum(c)) {
+		val = c - '0' + 52;
+	}
+	else if (c == '+') val = 62;
+	else if (c == '/') val = 63;
+	bitset<6> bi(val);
+	string ret = bi.to_string();
+	return ret;
+}
+
+char Bit6_2_Base64(bitset<6> bi) {
+	uint8_t val = bi.to_ulong();
+	if (val < 26) {
+		return 'A' + val;
+	}
+	else if (val < 52) {
+		return 'a' + val - 26;
+	}
+	else if (val < 62) {
+		return '0' + val - 52;
+	}
+	else if (val == 62) return '+';
+	return '/';
+}
+
 string Uint8_t2HexString(uint8_t in) {
 	string res = "";
 	uint16_t _in = (uint16_t)in;
@@ -622,6 +711,7 @@ void compare(uint8_t* a, uint8_t* b, size_t Size) {
 }
 
 void hexdump(void* ptr, int buflen) {
+	puts("This is my debug");
 	if (!buflen)
 		return;
 	unsigned char* buf = (unsigned char*)ptr;
@@ -629,6 +719,22 @@ void hexdump(void* ptr, int buflen) {
 	printf("    ");
 	for (int i = 1; i < buflen + 1; i++) {
 		printf("%02x ", buf[i - 1]);
+		if (!(i & 0xf))
+			printf("\n    ");
+	}
+	if (buflen & 0xf)
+		printf("\n");
+	printf("\n");
+}
+
+void hexdump(string ptr, int buflen) {
+	puts("This is my debug");
+	if (!buflen)
+		return;
+	printf("%s\n", ptr.c_str());
+	printf("    ");
+	for (int i = 1; i < buflen + 1; i++) {
+		printf("%02x ", (uint8_t)ptr[i - 1]);
 		if (!(i & 0xf))
 			printf("\n    ");
 	}

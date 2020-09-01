@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <memory>
 #include <cstdio>
+#include <bitset>
 
 #include <cryptopp/algebra.h>
 #include <cryptopp/argnames.h>
@@ -60,6 +61,8 @@ public:
 	bool VerifySign(char* vsignPath);
 	void RSAEnc(uint8_t* Data, size_t Size);
 	void RSASignPKCS(char* Data, size_t Size);
+	void Base642Uint8_t(string base64, uint8_t* data);
+	string Uint8_t2Base64(uint8_t* data);
 private:
 	int keySize;
 	int CipherSize;
@@ -72,5 +75,6 @@ uint8_t HexString2Uint8_t(char c1, char c2);
 void compare(uint8_t* a, uint8_t* b, size_t Size);
 void hexdump(void* ptr, int buflen);
 void showParam(InvertibleRSAFunction params);
-
-
+string Base64_2_6bit(char c);
+void hexdump(string ptr, int buflen);
+char Bit6_2_Base64(bitset<6> bi);
